@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Educational Tool Chatbot with Memory</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { background: #f5f5f5; padding: 20px; border-radius: 10px; }
+        .input-group { margin: 20px 0; }
+        textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .response { margin: 20px 0; padding: 15px; background: white; border-radius: 5px; border-left: 4px solid #007bff; }
+        .tool { margin: 10px 0; padding: 10px; background: #e9ecef; border-radius: 5px; }
+        .confidence { color: #28a745; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 5px; margin: 5px 0; border: 1px solid #ddd; border-radius: 3px; }
+        label { font-weight: bold; display: block; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 Educational Tool Chatbot with Memory</h1>
+        <p>Ask me about educational tools and I'll recommend the best ones for your needs! 🧠 <em>Now with personalized memory to learn your teaching style!</em></p>
+        
+        <div class="input-group">
+            <textarea id="queryInput" placeholder="Example: I need to create a lesson plan for my math class..."></textarea>
+            <br><br>
+            <label for="userIdInput">User ID (optional for memory):</label>
+            <input type="text" id="userIdInput" placeholder="Enter your user ID to save preferences" style="width: 100%; padding: 5px; margin: 10px 0;">
+            <br>
+            <button onclick="sendQuery()">Get Recommendations</button>
+            <button onclick="viewInsights()" style="margin-left: 10px;">View My Insights</button>
+            <button onclick="clearMemory()" style="margin-left: 10px; background-color: #dc3545;">Clear Memory</button>
+        </div>
+        
+        <div id="response" class="response" style="display: none;"></div>
+        <div id="insights" class="response" style="display: none;"></div>
+    </div>
+
+    <script>
+        async function sendQuery() {
+            const query = document.getElementById('queryInput').value;
+            const userId = document.getElementById('userIdInput').value;
+            if (!query.trim()) return;
+            
+            const responseDiv = document.getElementById('response');
+            responseDiv.innerHTML = 'Processing your request...';
+            responseDiv.style.display = 'block';
+            
+            try {
+                // Add timestamp to prevent caching
+                const timestamp = new Date().getTime();
+                const requestBody = {
+                    query: query,
+                    timestamp: timestamp
+                };
+                
+                if (userId.trim()) {
+                    requestBody.user_id = userId.trim();
+                }
+                
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                
+                // Debug logging
+                console.log('Query:', query);
+                console.log('User ID:', userId);
+                console.log('Response data:', data);
+                console.log('Primary tools:', data.recommendations);
+                console.log('Response text:', data.response_text);
+                
+                let html = `
+                    <h3>Recommendations <span class="confidence">(${Math.round(data.confidence_score * 100)}% confidence)</span></h3>
+                    <p><strong>Query Type:</strong> ${data.query_type}</p>
+                    <p><strong>Analysis:</strong> ${data.reasoning}</p>
+                    <p><strong>AI Response:</strong> ${data.response_text}</p>
+                    
+                    <h4>🎯 Primary Recommendations:</h4>
+                `;
+                
+                if (data.recommendations && data.recommendations.length > 0) {
+                    data.recommendations.forEach(tool => {
+                        html += `
+                            <div class="tool">
+                                <strong><a href="${tool.url}" target="_blank">${tool.name}</a></strong>
+                                <p>${tool.description}</p>
+                                <p><em>Category: ${tool.category}</em></p>
+                                <p><strong>Keywords:</strong> ${tool.keywords.join(', ')}</p>
+                                <p><strong>Use Cases:</strong> ${tool.use_cases.join(', ')}</p>
+                            </div>
+                        `;
+                    });
+                } else {
+                    html += '<p>No primary recommendations found.</p>';
+                }
+                
+                if (data.alternative_tools && data.alternative_tools.length > 0) {
+                    html += '<h4>🔄 Alternative Tools:</h4>';
+                    data.alternative_tools.forEach(tool => {
+                        html += `
+                            <div class="tool">
+                                <strong><a href="${tool.url}" target="_blank">${tool.name}</a></strong>
+                                <p>${tool.description}</p>
+                                <p><em>Category: ${tool.category}</em></p>
+                            </div>
+                        `;
+                    });
+                }
+                
+                responseDiv.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                responseDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        async function viewInsights() {
+            const userId = document.getElementById('userIdInput').value;
+            if (!userId.trim()) {
+                alert('Please enter a user ID to view insights');
+                return;
+            }
+            
+            const insightsDiv = document.getElementById('insights');
+            insightsDiv.innerHTML = 'Loading insights...';
+            insightsDiv.style.display = 'block';
+            
+            try {
+                const response = await fetch(`/memory/insights/${userId.trim()}`);
+                const data = await response.json();
+                
+                let html = `
+                    <h3>📊 Teaching Insights for ${userId}</h3>
+                    <p><strong>Generated:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+                `;
+                
+                if (data.insights && Object.keys(data.insights).length > 0) {
+                    Object.entries(data.insights).forEach(([key, value]) => {
+                        html += `<p><strong>${key}:</strong> ${JSON.stringify(value)}</p>`;
+                    });
+                } else {
+                    html += '<p>No insights available yet. Try asking more questions!</p>';
+                }
+                
+                insightsDiv.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                insightsDiv.innerHTML = `<p style="color: red;">Error loading insights: ${error.message}</p>`;
+            }
+        }
+        
+        async function clearMemory() {
+            const userId = document.getElementById('userIdInput').value;
+            if (!userId.trim()) {
+                alert('Please enter a user ID to clear memory');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to clear all memory for user ${userId}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/memory/clear/${userId.trim()}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                alert(`Memory cleared for user ${userId}`);
+                
+                // Clear insights display
+                const insightsDiv = document.getElementById('insights');
+                insightsDiv.style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error clearing memory: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html> 
